@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The connext - ข้อมูลสมาชิก</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap');
+    body { font-family: 'Kanit', sans-serif; background-color: #f0f2f5; }
+  </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+
+  <div class="w-full max-w-sm bg-white rounded-3xl shadow-2xl overflow-hidden text-center p-6">
+    <img src="https://drive.google.com/uc?export=view&id=1DBfitT3Vrfh86mwrtcbO195gM5Be3Q10" class="h-16 mx-auto mb-6">
+    
+    <div id="loading" class="py-10">
+      <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto mb-4"></div>
+      <p class="text-gray-500">กำลังโหลดข้อมูล...</p>
+    </div>
+
+    <div id="displayArea" class="hidden">
+      <div class="bg-white p-4 inline-block rounded-xl border border-gray-100 shadow-sm mb-4">
+        <img id="qrCode" src="" alt="QR Code" class="w-48 h-48">
+      </div>
+
+      <div class="mb-4">
+        <p class="text-xs text-gray-400 uppercase tracking-widest">Member Code</p>
+        <h3 id="txtCode" class="text-2xl font-bold text-blue-600"></h3>
+      </div>
+
+      <hr class="my-4 border-gray-100">
+
+      <div class="space-y-2">
+        <p class="text-gray-700">ชื่อเล่น: <span id="txtNickname" class="font-semibold text-gray-900"></span></p>
+        <p class="text-gray-700">ชื่อ-นามสกุล: <span id="txtFullname" class="font-semibold text-gray-900"></span></p>
+      </div>
+    </div>
+
+    <div id="errorArea" class="hidden py-10">
+      <div class="text-red-500 text-5xl mb-4">⚠️</div>
+      <p id="errorMsg" class="text-gray-600"></p>
+      <button onclick="liff.closeWindow()" class="mt-6 bg-gray-200 px-6 py-2 rounded-full text-sm">ปิดหน้าต่าง</button>
+    </div>
+  </div>
+
+  <script>
+    // --- ตั้งค่าข้อมูลตรงนี้ ---
+    const NEW_LIFF_ID = "ใส่_LIFF_ID_ตัวใหม่ที่นี่"; 
+    const GAS_API_URL = "ใส่_WEB_APP_URL_ที่ลงท้ายด้วย_EXEC_ที่นี่";
+    // ----------------------
+
+    async function init() {
+      try {
+        await liff.init({ liffId: NEW_LIFF_ID });
+        if (!liff.isLoggedIn()) {
+          liff.login();
+          return;
+        }
+        
+        const profile = await liff.getProfile();
+        const lineId = profile.userId;
+        fetchData(lineId);
+
+      } catch (err) {
+        showError("LIFF Error: " + err.message);
+      }
+    }
+
+    async function fetchData(lineId) {
+      try {
+        const response = await fetch(`${GAS_API_URL}?lineId=${lineId}`);
+        const data = await response.json();
+
+        document.getElementById('loading').classList.add('hidden');
+
+        if (data.success) {
+          // แสดงข้อมูล
+          document.getElementById('displayArea').classList.remove('hidden');
+          document.getElementById('txtCode').innerText = data.code;
+          document.getElementById('txtNickname').innerText = data.nickname || "-";
+          document.getElementById('txtFullname').innerText = data.fullname;
+          
+          // เจน QR Code (ใช้ Google Chart API หรือ QRServer)
+          document.getElementById('qrCode').src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data.code)}`;
+        } else {
+          showError(data.message);
+        }
+      } catch (err) {
+        showError("ไม่สามารถติดต่อเซิร์ฟเวอร์ได้");
+      }
+    }
+
+    function showError(msg) {
+      document.getElementById('loading').classList.add('hidden');
+      document.getElementById('errorArea').classList.remove('hidden');
+      document.getElementById('errorMsg').innerText = msg;
+    }
+
+    window.onload = init;
+  </script>
+</body>
+</html>
