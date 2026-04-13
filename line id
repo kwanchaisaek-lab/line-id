@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The connext</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500&display=swap');
+    body { font-family: 'Kanit', sans-serif; background-color: #f8fafc; }
+  </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+
+  <div class="w-full max-w-md bg-white rounded-2xl shadow-xl p-8 text-center">
+    <h2 class="text-xl font-bold text-gray-800 mb-2">ลงทะเบียนระบุตัวตน</h2>
+    <p class="text-sm text-gray-500 mb-8">กรุณากรอกชื่อ-นามสกุล เพื่อเชื่อมต่อกับระบบ</p>
+
+    <div class="space-y-4">
+      <input type="text" id="fullName" placeholder="ชื่อ - นามสกุล" 
+        class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none transition">
+      
+      <button onclick="handleSearch()" id="btnSearch" disabled
+        class="w-full bg-blue-600 text-white font-bold py-3 rounded-xl shadow-lg hover:bg-blue-700 transition disabled:bg-gray-300">
+        กำลังเตรียมระบบ...
+      </button>
+    </div>
+
+    <p id="liffStatus" class="mt-4 text-xs text-gray-400">รอการเชื่อมต่อ LINE...</p>
+  </div>
+
+  <script>
+    const LIFF_ID = "2009766397-V5gKtFvh";
+    
+    // 🚨 นำลิงก์ Web App (/exec) ของคุณมาใส่ที่นี่ 🚨
+    const GOOGLE_SCRIPT_URL = "นำลิงก์_APPS_SCRIPT_มาวางที่นี่"; 
+    
+    let userLineId = "";
+
+    async function initLiff() {
+      try {
+        await liff.init({ liffId: LIFF_ID });
+        if (!liff.isLoggedIn()) {
+          liff.login();
+        } else {
+          const profile = await liff.getProfile();
+          userLineId = profile.userId;
+          
+          document.getElementById('btnSearch').disabled = false;
+          document.getElementById('btnSearch').innerText = "ค้นหาและบันทึก";
+          document.getElementById('liffStatus').innerText = "เชื่อมต่อ LINE สำเร็จ";
+        }
+      } catch (err) {
+        document.getElementById('liffStatus').innerText = "ข้อผิดพลาด: " + err.message;
+      }
+    }
+
+    async function handleSearch() {
+      const name = document.getElementById('fullName').value;
+      if (!name) {
+        Swal.fire('แจ้งเตือน', 'กรุณากรอกชื่อ-นามสกุล', 'warning');
+        return;
+      }
+
+      Swal.fire({ title: 'กำลังค้นหา...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+
+      try {
+        // ส่งข้อมูลไปหา Google Script
+        const response = await fetch(GOOGLE_SCRIPT_URL, {
+          method: 'POST',
+          body: new URLSearchParams({ name: name, lineId: userLineId })
+        });
+        
+        const result = await response.json();
+        Swal.close();
+
+        if (result.success) {
+          Swal.fire('สำเร็จ', result.message, 'success').then(() => {
+             liff.closeWindow(); 
+          });
+        } else {
+          Swal.fire('ไม่พบข้อมูล', result.message, 'error');
+        }
+      } catch (err) {
+        Swal.close();
+        Swal.fire('เกิดข้อผิดพลาด', 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error');
+      }
+    }
+
+    window.onload = initLiff;
+  </script>
+</body>
+</html>
