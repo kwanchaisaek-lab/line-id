@@ -4,6 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>The connext - ข้อมูลสมาชิก</title>
+
+  <!-- ⚡ Preconnect ไปยัง origin ที่ต้องเรียก ช่วยลด handshake latency -->
+  <link rel="preconnect" href="https://api.line.me" crossorigin>
+  <link rel="preconnect" href="https://script.google.com" crossorigin>
+  <link rel="preconnect" href="https://api.qrserver.com" crossorigin>
+  <link rel="dns-prefetch" href="https://lh3.googleusercontent.com">
+
   <script src="https://cdn.tailwindcss.com"></script>
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <style>
@@ -12,10 +19,15 @@
   </style>
 </head>
 <body class="flex items-center justify-center min-h-screen p-4">
-
   <div class="w-full max-w-sm bg-white rounded-3xl shadow-2xl overflow-hidden text-center p-6">
-    <img src="https://drive.google.com/uc?export=view&id=1DBfitT3Vrfh86mwrtcbO195gM5Be3Q10" class="h-16 mx-auto mb-6">
-    
+
+    <!-- ✅ โลโก้: ใช้ Google Drive URL รูปแบบใหม่ (lh3.googleusercontent.com) พร้อม fallback -->
+    <img
+      src="https://lh3.googleusercontent.com/d/1DBfitT3Vrfh86mwrtcbO195gM5Be3Q10=w400"
+      onerror="this.onerror=null;this.src='https://drive.google.com/thumbnail?id=1DBfitT3Vrfh86mwrtcbO195gM5Be3Q10&sz=w400';"
+      alt="The connext"
+      class="h-16 mx-auto mb-6">
+
     <div id="loading" class="py-10">
       <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto mb-4"></div>
       <p class="text-gray-500">กำลังโหลดข้อมูล...</p>
@@ -25,14 +37,11 @@
       <div class="bg-white p-4 inline-block rounded-xl border border-gray-100 shadow-sm mb-4">
         <img id="qrCode" src="" alt="QR Code" class="w-48 h-48">
       </div>
-
       <div class="mb-4">
         <p class="text-xs text-gray-400 uppercase tracking-widest">Member Code</p>
         <h3 id="txtCode" class="text-2xl font-bold text-blue-600"></h3>
       </div>
-
       <hr class="my-4 border-gray-100">
-
       <div class="space-y-2">
         <p class="text-gray-700">ชื่อเล่น: <span id="txtNickname" class="font-semibold text-gray-900"></span></p>
         <p class="text-gray-700">ชื่อ-นามสกุล: <span id="txtFullname" class="font-semibold text-gray-900"></span></p>
@@ -47,25 +56,41 @@
   </div>
 
   <script>
-    // --- ตั้งค่าข้อมูลตรงนี้ ---
-    const NEW_LIFF_ID = "2009766397-RkiS1cTN"; 
+    const NEW_LIFF_ID = "2009766397-RkiS1cTN";
     const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxvQanCJFfrIBn2EWNOUkPjUUBz_NdiZyYWCWDarSlzs-LU0VuEqgNZfWus9ErJZ65L4w/exec";
-    // ----------------------
+    const CACHE_KEY   = "connext_member_v1";
+
+    // 🏎️ แสดงข้อมูลจาก cache ทันที ระหว่างรอข้อมูลสดจากเซิร์ฟเวอร์ (ผู้ใช้รู้สึกโหลดไวขึ้นมาก)
+    function showFromCache() {
+      try {
+        const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || "null");
+        if (cached && cached.success) { renderData(cached); return true; }
+      } catch (e) {}
+      return false;
+    }
+
+    function renderData(data) {
+      document.getElementById('loading').classList.add('hidden');
+      document.getElementById('errorArea').classList.add('hidden');
+      document.getElementById('displayArea').classList.remove('hidden');
+      document.getElementById('txtCode').innerText     = data.code;
+      document.getElementById('txtNickname').innerText = data.nickname || "-";
+      document.getElementById('txtFullname').innerText = data.fullname;
+      document.getElementById('qrCode').src =
+        `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data.code)}`;
+    }
 
     async function init() {
+      // 1) แสดง cache ก่อนเลย
+      const hasCache = showFromCache();
+
       try {
         await liff.init({ liffId: NEW_LIFF_ID });
-        if (!liff.isLoggedIn()) {
-          liff.login();
-          return;
-        }
-        
+        if (!liff.isLoggedIn()) { liff.login(); return; }
         const profile = await liff.getProfile();
-        const lineId = profile.userId;
-        fetchData(lineId);
-
+        fetchData(profile.userId);   // ไม่ await → ถ้ามี cache แสดงแล้วจะไม่บล็อก UI
       } catch (err) {
-        showError("LIFF Error: " + err.message);
+        if (!hasCache) showError("LIFF Error: " + err.message);
       }
     }
 
@@ -73,33 +98,33 @@
       try {
         const response = await fetch(`${GAS_API_URL}?lineId=${lineId}`);
         const data = await response.json();
-
-        document.getElementById('loading').classList.add('hidden');
-
         if (data.success) {
-          // แสดงข้อมูล
-          document.getElementById('displayArea').classList.remove('hidden');
-          document.getElementById('txtCode').innerText = data.code;
-          document.getElementById('txtNickname').innerText = data.nickname || "-";
-          document.getElementById('txtFullname').innerText = data.fullname;
-          
-          // เจน QR Code (ใช้ Google Chart API หรือ QRServer)
-          document.getElementById('qrCode').src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data.code)}`;
+          renderData(data);
+          localStorage.setItem(CACHE_KEY, JSON.stringify(data)); // อัปเดต cache
         } else {
+          localStorage.removeItem(CACHE_KEY);
           showError(data.message);
         }
       } catch (err) {
+        // ถ้ามี cache โชว์อยู่แล้ว ก็ปล่อยให้ใช้ cache ต่อ ไม่ต้องแสดง error
+        if (!document.getElementById('displayArea').classList.contains('hidden')) return;
         showError("ไม่สามารถติดต่อเซิร์ฟเวอร์ได้");
       }
     }
 
     function showError(msg) {
       document.getElementById('loading').classList.add('hidden');
+      document.getElementById('displayArea').classList.add('hidden');
       document.getElementById('errorArea').classList.remove('hidden');
       document.getElementById('errorMsg').innerText = msg;
     }
 
-    window.onload = init;
+    // เริ่มให้ไวที่สุด — ไม่รอ window.onload
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
   </script>
 </body>
 </html>
